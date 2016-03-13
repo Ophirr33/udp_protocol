@@ -24,12 +24,12 @@
     (string-append hours ":" minutes ":" seconds ":" micro)))
 
 
-(define-values (msg-size data-size timeout sequence) (values 1500 1000 30 0))
+(define-values (msg-size data-size timeout sequence) (values 15 1000 30 0))
 (define args (current-command-line-arguments))
 ;; define ip and port as a pair
 (define udp-ip/port
-  (let ([lst (string-split (vector-ref args 1) ":")])
-    (cons (car lst) (string->number (cadar lst)))))
+  (let ([lst (string-split (vector-ref args 0) ":")])
+    (cons (car lst) (string->number (cadr lst)))))
 ;; initialize the socket
 (define socket (udp-open-socket))
 ;; clients connect, servers bind
@@ -37,7 +37,7 @@
 
 (define (send-next-packet)
   (let* ([data (read-bytes data-size)]
-         [msg (hash "sequence" sequence "data" (bytes->string/utf-8 data) "ack" #f "eof" #f)]
+         [msg (hash 'sequence sequence 'data (bytes->string/utf-8 data) 'ack #f 'end #f)]
          [len (bytes-length data)])
     (if (> len 0)
         (begin (set! sequence (+ sequence len))
@@ -61,11 +61,11 @@
       (with-handlers  ([exn:fail? (lambda (exn) (log "[recv corrupt packet]"))])
         (let ([decoded (string->jsexpr data-read)])
           ;; If there is an ack, send next packet
-          (if (= (hash-ref decoded "ack") sequence)
+          (if (= (hash-ref decoded 'ack) sequence)
               (begin (log (string-append "[recv ack] " (number->string sequence)))
                      ; Try to send next packet; break if no more data
                      (when (not (send-next-packet))
-                       (void)))
+                       (exit 0)))
               (loop data-read))))
       (begin (log "[error] timeout")
              (exit -1))))
@@ -74,7 +74,7 @@
       
 (udp-send socket
           (string->bytes/utf-8
-           (jsexpr->string (hash "eof" #t "data" "" "sequence" sequence "ack" #f))))
+           (jsexpr->string (hash 'end #t 'data "" 'sequence sequence 'ack #f))))
 
 (udp-close socket)
 (exit 0)

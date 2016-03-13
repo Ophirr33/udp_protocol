@@ -31,43 +31,41 @@
 (define socket (udp-open-socket))
 (udp-bind! socket udp-ip udp-port)
 ; Get port we bound to
-(define-values (local-address udp-p remote-address remote-port)
-  (udp-addresses socket #t))
+(let-values ([(local-address local-port remote-address remote-port)
+              (udp-addresses socket #t)])
+    (log (string-append "[bound] " (number->string local-port))))
+
+
 
 ; Now listen for packets
 (let loop ([data-read (make-bytes msg-size)])
   (define-values (bytes-received address port)
-    (udp-receive!* socket data-read 0 msg-size))
+    (udp-receive! socket data-read 0 msg-size))
   (if bytes-received
       (with-handlers  ([exn:fail? (lambda (exn) (log "[recv corrupt packet]"))])
         (let ([decoded (string->jsexpr data-read)])
 
           ; If the EOF flag is set, exit
-          (when (hash-ref decoded "eof")
+          (when (hash-ref decoded 'end)
             (begin (log "[completed]")
                    (exit 0)))
 
-          (when (hash-ref decoded "data")
+          (when (hash-ref decoded 'data)
             ;; IF we received data, we assume it's in order
             (begin (log (string-append "[recv data] "
-                                       (number->string (hash-ref decoded "sequence"))
+                                       (number->string (hash-ref decoded 'sequence))
                                        " ("
-                                       (number->string (string-length (hash-ref decoded "data")))
+                                       (number->string (string-length (hash-ref decoded 'data)))
                                        ") ACCEPTED (in-order)"))
-                   (write (hash-ref decoded "data"))
+                   (write (hash-ref decoded 'data))
                    (flush-output (current-output-port))))
-          
-          ;; If there is an ack, send next packet
-          (when (= (hash-ref decoded "ack") sequence)
-              (begin (log (string-append "[recv ack] " (number->string sequence)))
-                     ; Try to send next packet; break if no more data
-                     (when (not (send-next-packet))
-                       (void))))
-          
-          (define msg (jsexpr->string (hash "ack" (+ (hash-ref decoded "sequence")
-                                                     (string-length (hash-ref decoded "data"))))))
+         
+          ;; Send back an ack to the sender          
+          (define msg (jsexpr->string (hash 'ack (+ (hash-ref decoded 'sequence)
+                                                     (string-length (hash-ref decoded 'data))))))
           (log (string-append "ABOUT TO SEND " msg))
-          (udp-send-to* socket address port data-read)
+          (unless (udp-send-to* socket address port data-read)
+              (log "[error] unable to fully send packet"))
           (loop data-read)
           ))
       (begin (log "[error] timeout")
