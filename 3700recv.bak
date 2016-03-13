@@ -1,0 +1,18 @@
+#lang racket
+;; log the given message
+(define (log str)
+  (write (string-append (now) " " str "\n") (current-error-port)))
+
+
+;; get the time as hour:minute:second:microsecond
+(define (now)
+  (define (upcast n)
+    (if (integer? n) (inexact->exact n)
+        (upcast (* 10 n))))
+  (let* ([milli (current-inexact-milliseconds)]
+         [d (current-date)]
+         [micro   (number->string (upcast(- milli (floor milli))))]
+         [seconds (number->string (date-second d))]
+         [minutes (number->string (date-minute d))]
+         [hours   (number->string (date-hour d))])
+    (string-append hours ":" minutes ":" seconds ":" micro)))
